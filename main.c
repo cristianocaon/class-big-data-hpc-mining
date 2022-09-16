@@ -2,19 +2,15 @@
 #include <stdlib.h>
 #include <math.h>
 
-int bipartition(int dim, int i0, int im, double *data, int chosen_dim, //  input
-                int cluster_start[2], int cluster_size[2],             // output
-                double *cluster_bdry[2], double *cluster_centroid[2],  // output
-                short *cluster_assign)                                 // buffer
-{
+int bipartition(int dim, int i0, int im, double* data, int chosen_dim,  //  input
+    int cluster_start[2], int cluster_size[2],                          // output
+    double* cluster_bdry[2], double* cluster_centroid[2],               // output
+    short* cluster_assign) {                                            // buffer
 
     return 0;
 }
 
-int kd_tree(int dim, int ndata, double *data, int kk,
-            int *cluster_start, int *cluster_size, double **cluster_bdry, double **cluster_centroid,
-            short *cluster_assign)
-{
+int kd_tree(int dim, int ndata, double* data, int kk) {
     /***********************************************************************************
     dim -- number of dimensions or attributes of each datum.
     ndata -- total number of data points
@@ -28,24 +24,40 @@ int kd_tree(int dim, int ndata, double *data, int kk,
         cluster_centroid[kk][dim]
     *************************************************************************************/
 
-    double *centroids = malloc(sizeof(double) * dim);
-    double *buffer = malloc(sizeof(double) * ndata); // Temporarily stores data points from one dimension
+    int* cluster_start = malloc(sizeof(int) * kk);
+    int* cluster_size = malloc(sizeof(int) * kk);
 
-    int jj = 1; // the number of clusters the dataset is partitioned into.
+    double** cluster_bdry = malloc(sizeof(double*) * kk * 2 * dim);
+    double** cluster_centroid = malloc(sizeof(double*) * kk * dim);
 
-    while (jj < kk) // At the beginning, jj=1, meaning only one cluster, the whole dataset.
-    {
-        for (int j = 0; j < jj; j++) // j loops through indices of all jj clusters
-        {
+    short* cluster_assign = malloc(sizeof(short) * ndata);
+
+    // Populating cluster_start & cluster_size
+    cluster_start[0] = 0, cluster_size[0] = ndata;
+    for (int i = 1; i < kk; i++) {
+        cluster_start[i] = -1;
+        cluster_size[i] = -1;
+    }
+
+    // Populating cluster_assign
+    for (int i = 0; i < ndata; i++) {
+        cluster_assign[i] = 0;
+    }
+
+    double* centroids = malloc(sizeof(double) * dim);
+    double* buffer = malloc(sizeof(double) * ndata);        // Temporarily stores data points from one dimension
+
+    int jj = 1;                                             // the number of clusters the dataset is partitioned into.
+
+    while (jj < kk) {                                       // At the beginning, jj=1, meaning only one cluster, the whole dataset.
+        for (int j = 0; j < jj; j++) {                      // j loops through indices of all jj clusters
             int chosen_dim = -1;
             double largest_variance = -1.0, chosen_centroid = -1.0;
 
-            for (int i = 0; i < dim; i++)
-            {
+            for (int i = 0; i < dim; i++) {
                 double sum = 0.0;
                 int k = 0;
-                for (int ii = cluster_start[j] + i; ii < cluster_size[j] * dim; ii += dim)
-                {
+                for (int ii = cluster_start[j] + i; ii < cluster_size[j] * dim; ii += dim) {
                     buffer[k] = data[ii];
                     sum += data[ii];
                     k += 1;
@@ -55,8 +67,7 @@ int kd_tree(int dim, int ndata, double *data, int kk,
                 centroids[i] = sum / k;
 
                 double variance_numerator = 0.0;
-                for (int ii = 0; ii < cluster_size[j]; ii++)
-                {
+                for (int ii = 0; ii < cluster_size[j]; ii++) {
                     variance_numerator += pow((buffer[ii] - centroids[i]), 2);
                 }
 
@@ -66,8 +77,7 @@ int kd_tree(int dim, int ndata, double *data, int kk,
                 printf("Current dimension: %d\tVariance: %f\tMean: %f\n", i, dim_variance, centroids[i]);
 
                 // Determines dimension with largest variance
-                if (dim_variance > largest_variance)
-                {
+                if (dim_variance > largest_variance) {
                     largest_variance = dim_variance;
                     chosen_centroid = centroids[i];
                     chosen_dim = i;
@@ -85,46 +95,21 @@ int kd_tree(int dim, int ndata, double *data, int kk,
 
 // int search_kdtree(int dim, int ndata, double *data, int kk,
 //                   int *cluster_start, int *cluster_size, double **cluster_bdry,
-//                   double *query_pt, double *result_pt)
-// {
+//                   double *query_pt, double *result_pt) {
+// 
 //     /* search_kdtree() returns the number of data points checked */
 // }
 
-int main()
-{
+int main() {
     int ndata = 1000000, dim = 16, kk = 3;
-
-    double *data = malloc(sizeof(double) * ndata * dim);
-
-    int *cluster_start = malloc(sizeof(int) * kk);
-    int *cluster_size = malloc(sizeof(int) * kk);
-
-    double **cluster_bdry = malloc(sizeof(double *) * kk * 2 * dim);
-    double **cluster_centroid = malloc(sizeof(double *) * kk * dim);
-
-    short *cluster_assign = malloc(sizeof(short) * ndata);
+    double* data = malloc(sizeof(double) * ndata * dim);
 
     // Generating data
-    for (int i = 0; i < ndata * dim; i++)
-    {
+    for (int i = 0; i < ndata * dim; i++) {
         data[i] = (double)rand() / RAND_MAX;
     }
 
-    // Populating cluster_start & cluster_size
-    cluster_start[0] = 0, cluster_size[0] = ndata;
-    for (int i = 1; i < kk; i++)
-    {
-        cluster_start[i] = -1;
-        cluster_size[i] = -1;
-    }
-
-    // Populating cluster_assign
-    for (int i = 0; i < ndata; i++)
-    {
-        cluster_assign[i] = 0;
-    }
-
-    kd_tree(dim, ndata, data, kk, cluster_start, cluster_size, cluster_bdry, cluster_centroid, cluster_assign);
+    kd_tree(dim, ndata, data, kk);
 
     return 0;
 }
