@@ -44,15 +44,16 @@ int kd_tree(int dim, int ndata, double* data, int kk) {
         cluster_assign[i] = 0;
     }
 
-    double* centroids = malloc(sizeof(double) * dim);
-    double* buffer = malloc(sizeof(double) * ndata);        // Temporarily stores data points from one dimension
+    double* centroid = malloc(sizeof(double) * dim);        // Temporarily stores centroid for current cluster.
+    double* buffer = malloc(sizeof(double) * ndata);        // Temporarily stores data points from one dimension.
 
-    int jj = 1;                                             // the number of clusters the dataset is partitioned into.
+    int jj = 1;                                             // The number of clusters the dataset is partitioned into.
 
     while (jj < kk) {                                       // At the beginning, jj=1, meaning only one cluster, the whole dataset.
-        for (int j = 0; j < jj; j++) {                      // j loops through indices of all jj clusters
+        for (int j = 0; j < jj; j++) {                      // j loops through indices of all jj clusters.
+
             int chosen_dim = -1;
-            double largest_variance = -1.0, chosen_centroid = -1.0;
+            double largest_variance = -1.0;
 
             for (int i = 0; i < dim; i++) {
                 double sum = 0.0;
@@ -64,25 +65,26 @@ int kd_tree(int dim, int ndata, double* data, int kk) {
                 }
 
                 // Mean (centroid) calculation for current dimension
-                centroids[i] = sum / k;
+                centroid[i] = sum / k;
 
                 double variance_numerator = 0.0;
                 for (int ii = 0; ii < cluster_size[j]; ii++) {
-                    variance_numerator += pow((buffer[ii] - centroids[i]), 2);
+                    variance_numerator += pow((buffer[ii] - centroid[i]), 2);
                 }
 
                 // Variance calculation for current dimension
                 double dim_variance = variance_numerator / k;
 
-                printf("Current dimension: %d\tVariance: %f\tMean: %f\n", i, dim_variance, centroids[i]);
+                printf("Current dimension: %d\tVariance: %f\tMean: %f\n", i, dim_variance, centroid[i]);
 
                 // Determines dimension with largest variance
                 if (dim_variance > largest_variance) {
                     largest_variance = dim_variance;
-                    chosen_centroid = centroids[i];
                     chosen_dim = i;
                 }
             }
+
+            cluster_centroid[j] = centroid;
 
             printf("Largest variance is from dimension %d: %f\n\n", chosen_dim, largest_variance);
             //   call bipartition() to partition the j-th cluster into 2 clusters
