@@ -15,9 +15,9 @@
 
 int bipartition(int dim, int i0, int im, double* data, int chosen_dim, int cluster_id, int cluster_start[2],
     int cluster_size[2], double* cluster_bdry[2], double cluster_centroid, short* cluster_assign) {
-    /**********************************************
-     * Partitions given cluster into two clusters.
-    **********************************************/
+    /********************************************
+     * Partitions given cluster in two clusters.
+    ********************************************/
 
     double* partitioned_data = malloc(sizeof(double) * im * dim);
 
@@ -110,10 +110,10 @@ int bipartition(int dim, int i0, int im, double* data, int chosen_dim, int clust
 
 int kd_tree(int dim, int ndata, double* data, int kk, int* cluster_start, int* cluster_size,
     double** cluster_bdry, double** cluster_centroid, short* cluster_assign) {
-    /********************************************
-     * Sorts a given multidimensional data array
-       using K-D tree.
-    ********************************************/
+    /***********************************************
+     * Transforms given multidimensional data array
+       into a K-D tree.
+    ***********************************************/
 
     int cluster_id, chosen_dim, k, jj = 1;
 
@@ -133,12 +133,7 @@ int kd_tree(int dim, int ndata, double* data, int kk, int* cluster_start, int* c
     for (int i = 0; i < kk; i++) {
         temp_bdry = malloc(sizeof(double) * dim * 2);
         for (int j = 0; j < dim * 2; j++) {
-            if (j % 2 == 0) {
-                temp_bdry[j] = __DBL_MAX__;
-            }
-            else {
-                temp_bdry[j] = __DBL_MIN__;
-            }
+            temp_bdry[j] = (j % 2 == 0) ? __DBL_MAX__ : __DBL_MIN__;
         }
         cluster_bdry[i] = temp_bdry;
     }
@@ -160,47 +155,39 @@ int kd_tree(int dim, int ndata, double* data, int kk, int* cluster_start, int* c
                     sum += data[ii];
                     k += 1;
                 }
-
                 // Calculates the Mean (centroid) for current cluster dimension.
                 centroid[i] = sum / k;
                 variance_numerator = 0.0;
-
                 // Loop through current cluster dimension coordinates to calculate variance.
                 for (int ii = 0; ii < cluster_size[j]; ii++) {
                     variance_numerator += pow((dim_pts[ii] - centroid[i]), 2);
                 }
-
                 // Variance calculation for current cluster dimension.
                 dim_variance = variance_numerator / k;
-
                 // Check for dimension with largest variance.
                 if (dim_variance > largest_variance) {
                     largest_variance = dim_variance;
                     chosen_dim = i;
                 }
             }
-
             cluster_centroid[j] = centroid;
-
             // Bipartition the j-th cluster into 2 clusters
             bipartition(dim, cluster_start[j], cluster_size[j], data, chosen_dim,
                 cluster_id, start_buffer, size_buffer, cluster_bdry,
                 cluster_centroid[j][chosen_dim], cluster_assign);
-
             cluster_id += 2;
         }
-
         // Update clusters start and size.
         for (int i = 0; i < kk; i++) {
             cluster_start[i] = start_buffer[i];
             cluster_size[i] = size_buffer[i];
         }
-
         jj *= 2;
     }
 
     free(dim_pts);
     free(centroid);
+    free(temp_bdry);
     free(size_buffer);
     free(start_buffer);
 
@@ -261,10 +248,8 @@ int search_kd_tree(int dim, int ndata, double* data, int kk, int* cluster_start,
             if (count_cluster_dims == dim) {
                 // Loop through cluster data points.
                 for (int j = cluster_start[i]; j < cluster_start[i] + cluster_size[i] * dim; j++) {
-
                     // Cluster data point & query point current dimension distance.
                     dist_dims += pow(fabs(data[j]) - fabs(query_pts[ii + k]), 2);
-
                     if (k == (dim - 1)) {
                         pts_checked += 1;
                         distance = sqrt(dist_dims);
@@ -301,7 +286,6 @@ int search_kd_tree(int dim, int ndata, double* data, int kk, int* cluster_start,
                 }
                 pts_checked += 1;
                 distance = sqrt(dist_dims);
-
                 // Check if distance to cluster is the new smallest.
                 if (distance < d_mins[ii / dim]) {
                     d_mins[ii / dim] = distance;
@@ -324,6 +308,12 @@ int search_kd_tree(int dim, int ndata, double* data, int kk, int* cluster_start,
 
 
 int main() {
+    /********************************************************************************
+     * Steps performed in the program:
+     *  1- Generates a random multidimensional array using given parameters.
+     *  2- Transforms the array into a K-D tree.
+     *  3- Searches for closest points in K-D tree for given array of query points.
+    ********************************************************************************/
 
     int ndata = 1000000, dim = 16, kk = 1024, num_query_pts = 1000;
 
