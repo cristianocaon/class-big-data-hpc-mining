@@ -1,6 +1,8 @@
-# Mining Big Data with High-Performance Computing - CS 5331 - Texas Tech University
+# Mining Big Data with High-Performance Computing
 
-Algorithms implemented throughout the course:
+Repository designated to store assignments from CS 5331 from Texas Tech University.
+
+Algorithms studied and implemented throughout the course:
 
 1. K-Dimensional Tree (K-d Tree)
 2. Locality-Sensitive Hashing (LSH)
