@@ -36,10 +36,6 @@ int LSH(int dim, int ndata, double* data,
     int* data_hashes = malloc(sizeof(int) * ndata * m);
     int* cluster_assign = malloc(sizeof(int) * ndata);
 
-    cluster_start = malloc(sizeof(int) * nclusters);
-    cluster_size = malloc(sizeof(int) * nclusters);
-    cluster_hashval = malloc(sizeof(*cluster_hashval) * nclusters * m);
-
     for (int i = 0; i < ndata * dim; i += dim) {
 
         jj = ii;
@@ -82,8 +78,8 @@ int LSH(int dim, int ndata, double* data,
                 }
             }
 
+            // Assign data point to cluster with same hash
             if (match == m) {
-                // Assign data point to cluster with same hash
                 printf("\nCluster matched!");
                 cluster_assign[count] = j;
                 break;
@@ -92,8 +88,8 @@ int LSH(int dim, int ndata, double* data,
             kk = jj;
         }
 
+        // No cluster found for this hash, create new cluster.
         if (match == 0) {
-            // No cluster found for this hash, create new cluster.
             printf("\nNo cluster matched, creating new one...");
             cluster_hashval = realloc(cluster_hashval, sizeof(*cluster_hashval) * (nclusters + 1));
             cluster_hashval[nclusters] = malloc(sizeof(int) * m);
@@ -128,6 +124,7 @@ int LSH(int dim, int ndata, double* data,
     }
 
     free(data_hashes);
+    free(cluster_assign);
 
     return nclusters;
 }
@@ -143,11 +140,9 @@ int search_LSH(int dim, int ndata, double* data,
     ******************************************************************/
 
     int ii = 0, checked = 0, match = 0, cluster_id = -1;
-
     int* query_hash = malloc(sizeof(int) * m);
 
-    double inner_product = 0.0, dist = 0, min_dist = __DBL_MAX__;
-
+    double inner_product = 0.0, dist = 0.0, min_dist = __DBL_MAX__;
     double* closest = malloc(sizeof(double) * dim);
 
     // Computing query point hash.
@@ -191,8 +186,6 @@ int search_LSH(int dim, int ndata, double* data,
             dist += fabs(query_pt[j]) - fabs(data[j]);
         }
 
-        min_dist = (dist < min_dist) ? dist : min_dist;
-
         if (dist < min_dist) {
             min_dist = dist;
             for (int k = i; k < i + dim; k++) {
@@ -202,7 +195,7 @@ int search_LSH(int dim, int ndata, double* data,
             ii = 0;
         }
 
-        dist = __DBL_MAX__;
+        dist = 0.0;
         checked += 1;
     }
 
@@ -213,6 +206,7 @@ int search_LSH(int dim, int ndata, double* data,
         printf("%f\t", closest[i]);
     }
 
+    free(closest);
     free(query_hash);
 
     return checked;
@@ -225,18 +219,17 @@ int main() {
      *
     ********************************************************************************/
 
-    // int ndata = 1000000, dim = 16, m = 5;
-    int ndata = 10, dim = 4, m = 5;
+    // int ndata = 1000000, dim = 16, m = 5, nclusters = 1;
+    int ndata = 10, dim = 4, m = 5, nclusters = 1;
 
-    int* cluster_size;
-    int* cluster_start;
-    int** cluster_hashval;
+    int* cluster_size = malloc(sizeof(int) * nclusters);
+    int* cluster_start = malloc(sizeof(int) * nclusters);
+    int** cluster_hashval = malloc(sizeof(*cluster_hashval) * nclusters * m);
 
     double inner_product, sum = 0.0, W = 0.3;
 
     double* centroids = malloc(sizeof(double) * dim);
     double* data = malloc(sizeof(double) * ndata * dim);
-    double* temp_h = malloc(sizeof(double) * dim);
     double* b = malloc(sizeof(double) * m);
     double** h = malloc(sizeof(double*) * m * dim);
 
@@ -251,10 +244,10 @@ int main() {
 
     printf("\nGenerating hashes...\n");
     for (int i = 0; i < m; i++) {
+        h[i] = malloc(sizeof(double) * dim);
         for (int j = 0; j < dim; j++) {
-            temp_h[j] = 2.0 * (rand() / RAND_MAX) - 1.0;
+            h[i][j] = 2.0 * (rand() / RAND_MAX) - 1.0;
         }
-        h[i] = temp_h;
     }
 
     printf("\nCalculating centroids...\n");
@@ -278,11 +271,12 @@ int main() {
     printf("\nSorting data using LSH...\n");
     LSH(dim, ndata, data, m, W, h, b, cluster_start, cluster_size, cluster_hashval);
 
+    free(b);
+    free(h);
     free(data);
-    free(temp_h);
     free(centroids);
-    // free(cluster_size);
-    // free(cluster_start);
+    free(cluster_size);
+    free(cluster_start);
     // free(cluster_hashval);
 
     return 0;
