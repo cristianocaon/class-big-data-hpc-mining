@@ -30,10 +30,12 @@ int LSH(int dim, int ndata, double* data,
      *      Your code must have this computation complexity.
     ******************************************************************/
 
-    int first = 1, match = 0, count = 1, nclusters = 1;
+    int first = 1, match = 0, nclusters = 1;
+    // Temporarily stores data point hash.
     int* data_hash = (int*)malloc(sizeof(int) * m);
 
     double inner_product = 0.0;
+    // Buffer used to organize the 'data' array according to the data points' clusters.
     double** clustered_data = (double**)malloc(sizeof(double*));
 
     // Iterating through all data points.
@@ -48,6 +50,7 @@ int LSH(int dim, int ndata, double* data,
         }
 
         // Initializing variables for first data point only.
+        // E.g.: First data point's hash will be the first cluster hash, etc.
         if (first) {
             (*cluster_size)[0] = 1;
             (*cluster_hashval)[0] = (int*)malloc(sizeof(int) * m);
@@ -103,7 +106,6 @@ int LSH(int dim, int ndata, double* data,
             }
             nclusters += 1;
         }
-        count += 1;
     }
 
     // Acquiring clusters start variables.
@@ -135,12 +137,15 @@ int search_LSH(int dim, int ndata, double* data,
     int m, double W, double** h, double* b,
     int nclusters, int* cluster_start, int* cluster_size, int** cluster_hashval,
     double* query_pt, double** result_pt) {
-    /***************************************************************************
-     * Searches closest data point to query point in LSH-organized data array.
-     * Returns number of data points checked in data array.
-    ***************************************************************************/
+    /*************************************************************************************
+     * Searches for the closest data point in cluster from LSH-organized data array.
+     *      If the data point is not inside a cluster, searches for the closest cluster.
+     *
+     * Returns number of data points checked in data array for closest distance.
+    *************************************************************************************/
 
-    int checked = 0, match = 0, cluster_id = -1;
+    int checked = 0, match = 0, cluster = -1;
+    // Stores query point's hash.
     int* query_hash = malloc(sizeof(int) * m);
 
     double inner_product = 0.0, dist = 0.0, min_dist = __DBL_MAX__;
@@ -154,7 +159,7 @@ int search_LSH(int dim, int ndata, double* data,
         inner_product = 0.0;
     }
 
-    // Searching if query point belongs to a cluster.
+    // Comparing query point and clusters' hashes to determine if it is inside a cluster.
     for (int i = 0; i < nclusters; i++) {
         for (int j = 0; j < m; j++) {
             if (query_hash[j] == cluster_hashval[i][j]) {
@@ -169,23 +174,35 @@ int search_LSH(int dim, int ndata, double* data,
         // Found query point inside a cluster.
         if (match == m) {
             printf("\nFound query point inside cluster %d!", i);
-            cluster_id = i;
+            cluster = i;
             break;
         }
     }
 
     // Query point is not inside any cluster.
+    // Search for closest cluster to query point.
     if (match == 0) {
-        printf("\nQuery point is not inside any cluster. Returning...");
-        return -1;
+        printf("\nQuery point is not inside any cluster.");
+        for (int i = 0; i < nclusters; i++) {
+            for (int j = 0; j < m; j++) {
+                // Manhattan distance between two hashes.
+                dist += abs(query_hash[j]) - abs(cluster_hashval[i][j]);
+            }
+            min_dist = (dist < min_dist) ? dist : min_dist;
+            dist = 0.0;
+            checked += 1;
+        }
+
+        return checked;
     }
 
     // Searching for closest data point to query point inside cluster.
-    for (int i = cluster_start[cluster_id]; i < cluster_start[cluster_id] + cluster_size[cluster_id] * dim; i += dim) {
+    for (int i = cluster_start[cluster]; i < cluster_start[cluster] + cluster_size[cluster] * dim; i += dim) {
         for (int j = i, k = 0; j < i + dim; j++, k++) {
-            dist += fabs(query_pt[k]) - fabs(data[j]);
+            // Euclidean distance between two data points.
+            dist += pow(fabs(query_pt[k]) - fabs(data[j]), 2);
         }
-        // Found new closest data point.
+        dist = sqrt(dist);
         if (dist < min_dist) {
             min_dist = dist;
             for (int j = i, k = 0; j < i + dim; j++, k++) {
@@ -194,11 +211,6 @@ int search_LSH(int dim, int ndata, double* data,
         }
         dist = 0.0;
         checked += 1;
-    }
-
-    printf("\nClosest data point from cluster %d: ", cluster_id);
-    for (int i = 0; i < dim; i++) {
-        printf("%f\t", (*result_pt)[i]);
     }
 
     // Clean up.
@@ -210,7 +222,8 @@ int search_LSH(int dim, int ndata, double* data,
 
 int main() {
     /********************************************************************************
-     * Steps performed in the program:
+     * Steps performed in main program:
+     *
      *  1- Generate necessary parameters.
      *  2- Organize data array with given parameters using LSH.
      *  3- Search for the closest data point to query point in organized data array.
@@ -266,8 +279,8 @@ int main() {
     }
 
     printf("\n\n+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\n");
-    printf("\nOrganizing data using LSH...");
 
+    printf("\nOrganizing data using LSH...");
     nclusters = LSH(dim, ndata, data, m, W, h, b, &cluster_start, &cluster_size, &cluster_hashval);
 
     printf("\nPartitioned data into %d clusters!", nclusters);
