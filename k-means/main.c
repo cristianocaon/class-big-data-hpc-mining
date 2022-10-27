@@ -27,8 +27,7 @@
 *******************************************************************************/
 
 
-int initial_centers(int dim, int ndata, int i0, int im, double* data, int kk,
-    double*** cluster_centroid) {
+int initial_centers(int dim, int ndata, double* data, int kk, double*** cluster_centroid) {
     /********************************************************************************
      *
     ********************************************************************************/
@@ -48,7 +47,7 @@ int initial_centers(int dim, int ndata, int i0, int im, double* data, int kk,
     end of while-loop
     */
 
-    int largest_idx = 0, n = 0, clusters = 2;
+    int largest_idx = 0, clusters = 2;
     double temp_dist, largest, dist = __DBL_MIN__;
 
     double* d_min = (double*)malloc(sizeof(double) * ndata);
@@ -66,7 +65,6 @@ int initial_centers(int dim, int ndata, int i0, int im, double* data, int kk,
         for (int j = i, k = 0; j < i + dim; j++, k++) {
             temp_dist += pow(fabs((*cluster_centroid)[0][k]) - fabs(data[j]), 2);
         }
-
         temp_dist = sqrt(temp_dist);
         if (temp_dist > dist) {
             for (int j = i, k = 0; j < i + dim; j++, k++) {
@@ -79,7 +77,7 @@ int initial_centers(int dim, int ndata, int i0, int im, double* data, int kk,
     // Creating new cluster centers.
     while (clusters < kk) {
         // Getting each data point closest center distance.
-        for (int i = 0; i < ndata * dim; i += dim) {
+        for (int i = 0, n = 0; i < ndata * dim; i += dim, n++) {
             d_min[n] = __DBL_MAX__;
             for (int j = 0; j < clusters; j++) {
                 temp_dist = 0.0;
@@ -91,7 +89,6 @@ int initial_centers(int dim, int ndata, int i0, int im, double* data, int kk,
                     d_min[n] = temp_dist;
                 }
             }
-            n += 1;
         }
         // Getting largest data point to a center distance.
         largest = d_min[0];
@@ -106,18 +103,17 @@ int initial_centers(int dim, int ndata, int i0, int im, double* data, int kk,
         for (int i = largest_idx * dim, j = 0; i < largest_idx * dim + dim; i++, j++) {
             (*cluster_centroid)[clusters][j] = data[i];
         }
-        clusters += 1;
-        n = 0;
+        clusters++;
     }
 
     return 0;
 }
 
 
-double kmeans(int dim, int i0, int im, double** data, int kk,       // input
-    short** cluster_assign,                                         // buffer
-    int** cluster_start, int** cluster_size,                        // output
-    double** cluster_radius, double*** cluster_centroid) {          // output
+double kmeans(int dim, int ndata, double** data, int kk,   // input
+    short** cluster_assign,                                // buffer
+    int** cluster_start, int** cluster_size,               // output
+    double** cluster_radius, double*** cluster_centroid) { // output
     /********************************************************************************
      * Returns the sum of square errors.
     ********************************************************************************/
@@ -138,6 +134,34 @@ double kmeans(int dim, int i0, int im, double** data, int kk,       // input
             stop_iteration = 1
      end of while-loop
     */
+
+    int count_cluster_change, chosen_cluster, stop_iteration = 0;
+
+    double temp_dist, d_min;
+
+    while (stop_iteration == 0) {
+        count_cluster_change = 0;
+        for (int i = 0, n = 0; i < ndata * dim; i += dim, n++) {
+            d_min = __DBL_MAX__;
+            chosen_cluster = (*cluster_assign)[n];
+            for (int j = 0; j < kk; j++) {
+                temp_dist = 0.0;
+                for (int k = i, ii = 0; k < i + dim; k++, ii++) {
+                    temp_dist += pow(fabs((*cluster_centroid)[j][ii]) - fabs((*data)[k]), 2);
+                }
+                temp_dist = sqrt(temp_dist);
+                if (temp_dist < d_min) {
+                    d_min = temp_dist;
+                    chosen_cluster = j;
+                }
+            }
+            if (chosen_cluster != (*cluster_assign)[n]) {
+                (*cluster_assign)[n] = chosen_cluster;
+                count_cluster_change++;
+            }
+        }
+        stop_iteration = (count_cluster_change == 0) ? 1 : 0;
+    }
 
     return 0;
 }
@@ -166,7 +190,7 @@ int main() {
     int* cluster_start = (int*)malloc(sizeof(int) * kk);
     int* cluster_size = (int*)malloc(sizeof(int) * kk);
 
-    short* cluster_assign = (short*)malloc(sizeof(short) * kk);
+    short* cluster_assign = (short*)malloc(sizeof(short) * ndata);
 
     double* data = (double*)malloc(sizeof(double) * ndata * dim);
     double* cluster_radius = (double*)malloc(sizeof(double) * kk);
@@ -185,11 +209,15 @@ int main() {
         // }
     }
 
+    for (int i = 0; i < ndata; i++) {
+        cluster_assign[i] = -1;
+    }
+
     printf("\nCreating initial cluster centers...\n");
-    initial_centers(dim, ndata, 0, ndata * dim - 1, data, kk, &cluster_centroid);
+    initial_centers(dim, ndata, data, kk, &cluster_centroid);
 
     printf("\nSorting data with k-means...\n");
-    kmeans(dim, 0, ndata * dim - 1, &data, kk, &cluster_assign, &cluster_start, &cluster_size, &cluster_radius, &cluster_centroid);
+    kmeans(dim, ndata, &data, kk, &cluster_assign, &cluster_start, &cluster_size, &cluster_radius, &cluster_centroid);
 
     // printf("\nAll centroids:\n");
     // for (int i = 0; i < kk; i++) {
