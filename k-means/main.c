@@ -144,6 +144,7 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
         for (int i = 0, n = 0; i < ndata * dim; i += dim, n++) {
             d_min = __DBL_MAX__;
             chosen_cluster = (*cluster_assign)[n];
+            // Finding closest cluster center to data point.
             for (int j = 0; j < kk; j++) {
                 temp_dist = 0.0;
                 for (int k = i, ii = 0; k < i + dim; k++, ii++) {
@@ -155,11 +156,13 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
                     chosen_cluster = j;
                 }
             }
+            // Data point changed cluster assignment.
             if (chosen_cluster != (*cluster_assign)[n]) {
                 (*cluster_assign)[n] = chosen_cluster;
                 count_cluster_change++;
             }
         }
+        // Exit condition.
         stop_iteration = (count_cluster_change == 0) ? 1 : 0;
     }
 
@@ -232,6 +235,10 @@ int main() {
         free(cluster_centroid[i]);
     }
     free(data);
+    free(cluster_size);
+    free(cluster_start);
+    free(cluster_assign);
+    free(cluster_radius);
 
     return 0;
 }
