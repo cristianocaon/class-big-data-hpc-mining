@@ -162,6 +162,16 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
                 count_cluster_change++;
             }
         }
+
+        // Re-calculating cluster centers.
+        for (int i = 0; i < kk; i++) {
+            for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
+                if ((*cluster_assign)[k] == i) {
+                    printf("\nBelongs to cluster %d", i);
+                }
+            }
+        }
+
         // Exit condition.
         stop_iteration = (count_cluster_change == 0) ? 1 : 0;
     }
