@@ -135,9 +135,11 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
      end of while-loop
     */
 
-    int count_cluster_change, chosen_cluster, stop_iteration = 0;
+    int count, count_cluster_change, chosen_cluster, stop_iteration = 0;
 
     double temp_dist, d_min;
+
+    double* buffer;
 
     while (stop_iteration == 0) {
         count_cluster_change = 0;
@@ -167,7 +169,7 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
         for (int i = 0; i < kk; i++) {
             for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
                 if ((*cluster_assign)[k] == i) {
-                    printf("\nBelongs to cluster %d", i);
+                    printf("\nRecalculate center");
                 }
             }
         }
@@ -175,6 +177,44 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
         // Exit condition.
         stop_iteration = (count_cluster_change == 0) ? 1 : 0;
     }
+
+    count = 0;
+    (*cluster_start)[0] = 0;
+    buffer = (double*)malloc(sizeof(double) * ndata * dim);
+    for (int i = 0; i < kk; i++) {
+        for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
+            if ((*cluster_assign)[k] == i) {
+                for (int ii = j; ii < j + dim; ii++) {
+                    buffer[count] = (*data)[ii];
+                    count++;
+                }
+                (*cluster_size)[i]++;
+            }
+        }
+        if (i > 0) {
+            (*cluster_start)[i] = (*cluster_start)[i - 1] + (*cluster_size)[i - 1] * dim;
+        }
+    }
+
+    (*data) = buffer;
+
+    // printf("\n\n");
+    // for (int i = 0; i < kk; i++) {
+    //     printf("Cluster start: %d\tCluster size: %d\n", (*cluster_start)[i], (*cluster_size)[i]);
+    // }
+
+    // printf("\n\n");
+    // for (int i = 0; i < ndata; i++) {
+    //     printf("%d\n", (*cluster_assign)[i]);
+    // }
+
+    // printf("\n\n");
+    // for (int i = 0; i < ndata * dim; i++) {
+    //     printf("%f\t", buffer[i]);
+    //     if ((i + 1) % dim == 0) {
+    //         printf("\n");
+    //     }
+    // }
 
     return 0;
 }
@@ -198,7 +238,7 @@ int main() {
      *
     ********************************************************************************/
 
-    int ndata = 50, dim = 3, kk = (int)sqrt(ndata);
+    int ndata = 10, dim = 3, kk = (int)sqrt(ndata);
 
     int* cluster_start = (int*)malloc(sizeof(int) * kk);
     int* cluster_size = (int*)malloc(sizeof(int) * kk);
@@ -216,10 +256,10 @@ int main() {
     printf("\nGenerating random data...\n");
     for (int i = 0; i < ndata * dim; i++) {
         data[i] = (double)rand() / RAND_MAX;
-        // printf("%f\t", data[i]);
-        // if ((i + 1) % dim == 0) {
-        //     printf("\n");
-        // }
+        printf("%f\t", data[i]);
+        if ((i + 1) % dim == 0) {
+            printf("\n");
+        }
     }
 
     for (int i = 0; i < ndata; i++) {
@@ -231,6 +271,13 @@ int main() {
 
     printf("\nSorting data with k-means...\n");
     kmeans(dim, ndata, &data, kk, &cluster_assign, &cluster_start, &cluster_size, &cluster_radius, &cluster_centroid);
+
+    // for (int i = 0; i < ndata * dim; i++) {
+    //     printf("%f\t", data[i]);
+    //     if ((i + 1) % dim == 0) {
+    //         printf("\n");
+    //     }
+    // }
 
     // printf("\nAll centroids:\n");
     // for (int i = 0; i < kk; i++) {
