@@ -29,7 +29,7 @@
 
 int initial_centers(int dim, int ndata, double* data, int kk, double*** cluster_centroid) {
     /********************************************************************************
-     *
+     * Returns the initial centers for the 'k' clusters.
     ********************************************************************************/
 
     /*
@@ -139,7 +139,8 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
 
     double temp_dist, d_min;
 
-    double* buffer;
+    double* data_buffer;
+    double* centroid_buffer;
 
     while (stop_iteration == 0) {
         count_cluster_change = 0;
@@ -164,28 +165,36 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
                 count_cluster_change++;
             }
         }
-
         // Re-calculating cluster centers.
+        printf("\nRecalculating, %d", count_cluster_change);
         for (int i = 0; i < kk; i++) {
+            count = 0;
+            centroid_buffer = (double*)malloc(sizeof(double) * dim);
             for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
                 if ((*cluster_assign)[k] == i) {
-                    printf("\nRecalculate center");
+                    for (int ii = 0; ii < dim; ii++) {
+                        centroid_buffer[ii] += (*data)[j + ii];
+                    }
+                    count++;
                 }
             }
+            for (int j = 0; j < dim; j++) {
+                centroid_buffer[j] /= count;
+                (*cluster_centroid)[i][j] = centroid_buffer[j];
+            }
         }
-
         // Exit condition.
         stop_iteration = (count_cluster_change == 0) ? 1 : 0;
     }
 
     count = 0;
     (*cluster_start)[0] = 0;
-    buffer = (double*)malloc(sizeof(double) * ndata * dim);
+    data_buffer = (double*)malloc(sizeof(double) * ndata * dim);
     for (int i = 0; i < kk; i++) {
         for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
             if ((*cluster_assign)[k] == i) {
                 for (int ii = j; ii < j + dim; ii++) {
-                    buffer[count] = (*data)[ii];
+                    data_buffer[count] = (*data)[ii];
                     count++;
                 }
                 (*cluster_size)[i]++;
@@ -196,7 +205,7 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
         }
     }
 
-    (*data) = buffer;
+    (*data) = data_buffer;
 
     // printf("\n\n");
     // for (int i = 0; i < kk; i++) {
@@ -210,7 +219,7 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
 
     // printf("\n\n");
     // for (int i = 0; i < ndata * dim; i++) {
-    //     printf("%f\t", buffer[i]);
+    //     printf("%f\t", data_buffer[i]);
     //     if ((i + 1) % dim == 0) {
     //         printf("\n");
     //     }
@@ -238,7 +247,7 @@ int main() {
      *
     ********************************************************************************/
 
-    int ndata = 10, dim = 3, kk = (int)sqrt(ndata);
+    int ndata = 100, dim = 16, kk = (int)sqrt(ndata);
 
     int* cluster_start = (int*)malloc(sizeof(int) * kk);
     int* cluster_size = (int*)malloc(sizeof(int) * kk);
@@ -256,10 +265,10 @@ int main() {
     printf("\nGenerating random data...\n");
     for (int i = 0; i < ndata * dim; i++) {
         data[i] = (double)rand() / RAND_MAX;
-        printf("%f\t", data[i]);
-        if ((i + 1) % dim == 0) {
-            printf("\n");
-        }
+        // printf("%f\t", data[i]);
+        // if ((i + 1) % dim == 0) {
+        //     printf("\n");
+        // }
     }
 
     for (int i = 0; i < ndata; i++) {
