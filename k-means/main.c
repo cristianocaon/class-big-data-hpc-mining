@@ -233,6 +233,7 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
 
     double dist, min_dist = __DBL_MAX__;
 
+    // Finding closest cluster center
     for (int i = 0; i < kk; i++) {
         dist = 0.0;
         for (int j = 0; j < dim; j++) {
@@ -247,7 +248,24 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
 
     printf("\nThe data point is closer to cluster %d", cluster);
 
-    return 0;
+    // Finding closest data point inside cluster
+    min_dist = __DBL_MAX__;
+    for (int i = cluster_start[cluster]; i < cluster_start[cluster] + cluster_size[cluster] * dim; i += dim) {
+        dist = 0.0;
+        for (int j = i; j < i + dim; j++) {
+            dist += pow(fabs(query_pt[j]) - fabs(data[j]), 2);
+        }
+        dist = sqrt(dist);
+        if (dist < min_dist) {
+            min_dist = dist;
+            for (int j = i, k = 0; j < i + dim; j++, k++) {
+                (*result_pt)[k] = data[j];
+            }
+        }
+        checked++;
+    }
+
+    return checked;
 }
 
 
@@ -317,6 +335,11 @@ int main() {
         cluster_radius, cluster_centroid, query_pt, &result_pt);
 
     printf("\nChecked %d data points for query point.\n", checked);
+
+    printf("\nResult point: ");
+    for (int i = 0; i < dim; i++) {
+        printf("%f\t", result_pt[i]);
+    }
 
     // for (int i = 0; i < ndata * dim; i++) {
     //     printf("%f\t", data[i]);
