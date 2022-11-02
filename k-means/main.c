@@ -229,6 +229,24 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
      * Returns the number of data points checked
     *****************************************************/
 
+    int checked = 0, cluster = -1;
+
+    double dist, min_dist = __DBL_MAX__;
+
+    for (int i = 0; i < kk; i++) {
+        dist = 0.0;
+        for (int j = 0; j < dim; j++) {
+            dist += pow(fabs(query_pt[j]) - fabs(cluster_centroid[i][j]), 2);
+        }
+        dist = sqrt(dist);
+        if (dist < min_dist) {
+            min_dist = dist;
+            cluster = i;
+        }
+    }
+
+    printf("\nThe data point is closer to cluster %d", cluster);
+
     return 0;
 }
 
