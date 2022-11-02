@@ -221,7 +221,7 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
 int search_kmeans(int dim, int ndata, double* data, int kk,
     int* cluster_start, int* cluster_size,
     double* cluster_radius, double** cluster_centroid,
-    double* query_pt, double* result_pt) {
+    double* query_pt, double** result_pt) {
     /*****************************************************
      * Searches for closest data point from data array to
      *  given query points.
@@ -243,7 +243,7 @@ int main() {
      *  4- Search closest distance to query points
     ***********************************************/
 
-    int ndata = 10000, dim = 16, kk = (int)sqrt(ndata);
+    int checked, ndata = 10000, dim = 16, kk = (int)sqrt(ndata);
 
     int* cluster_start = (int*)malloc(sizeof(int) * kk);
     int* cluster_size = (int*)malloc(sizeof(int) * kk);
@@ -252,15 +252,17 @@ int main() {
 
     double error;
 
+    double* query_pt = (double*)malloc(sizeof(double) * dim);
+    double* result_pt = (double*)malloc(sizeof(double) * dim);
     double* data = (double*)malloc(sizeof(double) * ndata * dim);
     double* cluster_radius = (double*)malloc(sizeof(double) * kk);
     double** cluster_centroid = (double**)malloc(sizeof(double*) * kk);
 
     printf("\nParameters:\n+----------------------+");
     printf("\nndata = %d\ndim = %d\nkk = %d\n", ndata, dim, kk);
-    printf("+----------------------+\n\n");
+    printf("+----------------------+\n");
 
-    printf("\nGenerating random data...\n");
+    printf("\nGenerating random data...");
     for (int i = 0; i < ndata * dim; i++) {
         data[i] = (double)rand() / RAND_MAX;
         // printf("%f\t", data[i]);
@@ -273,13 +275,30 @@ int main() {
         cluster_assign[i] = -1;
     }
 
-    printf("\nCreating initial cluster centers...\n");
+    printf("\n\n+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\n");
+
+    printf("\nCreating initial cluster centers...");
     initial_centers(dim, ndata, data, kk, &cluster_centroid);
 
-    printf("\nSorting data with k-means...\n");
-    error = kmeans(dim, ndata, &data, kk, &cluster_assign, &cluster_start, &cluster_size, &cluster_radius, &cluster_centroid);
+    printf("\nSorting data with k-means...");
+    error = kmeans(dim, ndata, &data, kk, &cluster_assign, &cluster_start,
+        &cluster_size, &cluster_radius, &cluster_centroid);
 
-    printf("\nSum of square errors: %f\n", error);
+    printf("\nSum of square errors: %f", error);
+
+    printf("\n\n+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\n");
+
+
+    printf("\nGenerating a random query point...");
+    for (int i = 0; i < dim; i++) {
+        query_pt[i] = (double)rand() / RAND_MAX;
+    }
+
+    printf("\nSearching for closest data point to query point...");
+    checked = search_kmeans(dim, ndata, data, kk, cluster_start, cluster_size,
+        cluster_radius, cluster_centroid, query_pt, &result_pt);
+
+    printf("\nChecked %d data points for query point.\n", checked);
 
     // for (int i = 0; i < ndata * dim; i++) {
     //     printf("%f\t", data[i]);
@@ -301,6 +320,8 @@ int main() {
         free(cluster_centroid[i]);
     }
     free(data);
+    free(query_pt);
+    free(result_pt);
     free(cluster_size);
     free(cluster_start);
     free(cluster_assign);
