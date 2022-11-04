@@ -194,24 +194,6 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
         total_error += cluster_error / (*cluster_size)[i];
     }
 
-    // printf("\n\n");
-    // for (int i = 0; i < kk; i++) {
-    //     printf("Cluster start: %d\tCluster size: %d\tCluster radius: %f\n", (*cluster_start)[i], (*cluster_size)[i], (*cluster_radius)[i]);
-    // }
-
-    // printf("\n\n");
-    // for (int i = 0; i < ndata; i++) {
-    //     printf("%d\n", (*cluster_assign)[i]);
-    // }
-
-    // printf("\n\n");
-    // for (int i = 0; i < ndata * dim; i++) {
-    //     printf("%f\t", data_buffer[i]);
-    //     if ((i + 1) % dim == 0) {
-    //         printf("\n");
-    //     }
-    // }
-
     free(centroid_buffer);
 
     return total_error;
@@ -231,7 +213,7 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
 
     int checked = 0, cluster = -1;
 
-    double dist, min_dist = __DBL_MAX__;
+    double radius, dist, min_dist = __DBL_MAX__;
 
     // Finding closest cluster center
     for (int i = 0; i < kk; i++) {
@@ -252,8 +234,8 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
     min_dist = __DBL_MAX__;
     for (int i = cluster_start[cluster]; i < cluster_start[cluster] + cluster_size[cluster] * dim; i += dim) {
         dist = 0.0;
-        for (int j = i; j < i + dim; j++) {
-            dist += pow(fabs(query_pt[j]) - fabs(data[j]), 2);
+        for (int j = i, k = 0; j < i + dim; j++, k++) {
+            dist += pow(fabs(query_pt[k]) - fabs(data[j]), 2);
         }
         dist = sqrt(dist);
         if (dist < min_dist) {
@@ -263,6 +245,38 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
             }
         }
         checked++;
+    }
+
+    radius = min_dist;
+
+    printf("\nChecking if query point cluster intersects with other clusters...");
+
+    // Looking for even closer data point within query point cluster
+    for (int i = 0; i < kk; i++) {
+        dist = 0.0;
+        for (int j = 0; j < dim; j++) {
+            dist += pow(fabs(query_pt[j]) - fabs(cluster_centroid[i][j]), 2);
+        }
+        dist = sqrt(dist);
+        // Check if query point cluster intersects with other clusters
+        if (dist < radius + cluster_radius[i]) {
+            for (int j = cluster_start[i]; j < cluster_start[i] + cluster_size[i] * dim; j += dim) {
+                dist = 0.0;
+                for (int k = j, ii = 0; k < j + dim; k++, ii++) {
+                    dist += pow(fabs(query_pt[ii]) - fabs(data[k]), 2);
+                }
+                dist = sqrt(dist);
+                // Checking if there is a closer data point
+                if (dist < min_dist) {
+                    printf("\nFound closer data point from cluster %d", i);
+                    min_dist = dist;
+                    for (int k = j, ii = 0; k < j + dim; k++, ii++) {
+                        (*result_pt)[ii] = data[k];
+                    }
+                }
+                checked++;
+            }
+        }
     }
 
     return checked;
@@ -301,10 +315,6 @@ int main() {
     printf("\nGenerating random data...");
     for (int i = 0; i < ndata * dim; i++) {
         data[i] = (double)rand() / RAND_MAX;
-        // printf("%f\t", data[i]);
-        // if ((i + 1) % dim == 0) {
-        //     printf("\n");
-        // }
     }
 
     for (int i = 0; i < ndata; i++) {
@@ -336,25 +346,10 @@ int main() {
 
     printf("\nChecked %d data points for query point.\n", checked);
 
-    printf("\nResult point: ");
+    printf("\nResult point: \n");
     for (int i = 0; i < dim; i++) {
-        printf("%f\t", result_pt[i]);
+        printf("Coordinate %d\t --> %f\n", i, result_pt[i]);
     }
-
-    // for (int i = 0; i < ndata * dim; i++) {
-    //     printf("%f\t", data[i]);
-    //     if ((i + 1) % dim == 0) {
-    //         printf("\n");
-    //     }
-    // }
-
-    // printf("\nAll centroids:\n");
-    // for (int i = 0; i < kk; i++) {
-    //     for (int j = 0; j < dim; j++) {
-    //         printf("%f\t", cluster_centroid[i][j]);
-    //     }
-    //     printf("\n");
-    // }
 
     // Clean up
     for (int i = 0; i < kk; i++) {
