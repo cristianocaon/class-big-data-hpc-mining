@@ -114,6 +114,8 @@ int initial_centers(int dim, int ndata, double* data, int kk, double*** cluster_
         clusters++;
     }
 
+    free(d_min);
+
     return 0;
 }
 
@@ -121,7 +123,8 @@ int initial_centers(int dim, int ndata, double* data, int kk, double*** cluster_
 double kmeans(int dim, int ndata, double** data, int kk,   // input
     short** cluster_assign,                                // buffer
     int** cluster_start, int** cluster_size,               // output
-    double** cluster_radius, double*** cluster_centroid) { // output
+    double** cluster_radius, double*** cluster_centroid,    // output
+    int rank, int np) {
     /****************************************************
      * Organizes the data array using K-Means algorithm
      *  into 'kk' number of clusters.
@@ -129,12 +132,16 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
      * Returns the sum of square errors.
     ****************************************************/
 
-    int count, all_proc_cluster_change, count_cluster_change, chosen_cluster, stop_iteration = 0;
+    int count, all_proc_cluster_change, all_proc_count, count_cluster_change, chosen_cluster, stop_iteration = 0;
 
-    double temp_dist, d_min, total_error, cluster_error, point_error;
+    double temp_dist, d_min, total_error, cluster_error, point_error, all_proc_total_error;
 
     double* data_buffer;
     double* centroid_buffer;
+    double* all_proc_centroid_buffer;
+
+    struct double_rank proc_radius;
+    struct double_rank global_radius;
 
     while (stop_iteration == 0) {
         count_cluster_change = 0;
@@ -164,11 +171,16 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
         MPI_Allreduce(&count_cluster_change, &all_proc_cluster_change, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 
         // Exit condition
-        stop_iteration = (all_proc_cluster_change == 0) ? 1 : 0;
+        if (all_proc_cluster_change == 0) {
+            stop_iteration = 1;
+            break;
+        }
 
         // Re-calculating cluster centers
         for (int i = 0; i < kk; i++) {
+            all_proc_count = 0;
             count = 0;
+            all_proc_centroid_buffer = (double*)malloc(sizeof(double) * dim);
             centroid_buffer = (double*)malloc(sizeof(double) * dim);
             for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
                 if ((*cluster_assign)[k] == i) {
@@ -178,15 +190,24 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
                     count++;
                 }
             }
+
+            // Adding all dimensions from all processes
+            MPI_Allreduce(centroid_buffer, all_proc_centroid_buffer, dim, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+            // Adding count change from all processes
+            MPI_Allreduce(&count, &all_proc_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+            // Updating cluster centroid with info from all processes
             for (int j = 0; j < dim; j++) {
-                centroid_buffer[j] /= count;
-                (*cluster_centroid)[i][j] = centroid_buffer[j];
+                all_proc_centroid_buffer[j] /= all_proc_count;
+                (*cluster_centroid)[i][j] = all_proc_centroid_buffer[j];
             }
         }
 
         // Re-calculating cluster radius
         for (int i = 0; i < kk; i++) {
-            (*cluster_radius)[i] = __DBL_MIN__;
+            proc_radius.value = __DBL_MIN__;
+            proc_radius.rank = rank;
             for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
                 if ((*cluster_assign)[k] == i) {
                     temp_dist = 0.0;
@@ -194,49 +215,62 @@ double kmeans(int dim, int ndata, double** data, int kk,   // input
                         temp_dist += pow(fabs((*cluster_centroid)[i][ii]) - fabs((*data)[j + ii]), 2);
                     }
                     temp_dist = sqrt(temp_dist);
-                    (*cluster_radius)[i] = (temp_dist > (*cluster_radius)[i]) ? temp_dist : (*cluster_radius)[i];
+                    proc_radius.value = (temp_dist > proc_radius.value) ? temp_dist : proc_radius.value;
                 }
             }
+            // Getting largest radius from processes
+            MPI_Allreduce(&proc_radius, &global_radius, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+            // Broadcasting largest radius to all processes
+            MPI_Bcast(&proc_radius.value, 1, MPI_DOUBLE, proc_radius.rank, MPI_COMM_WORLD);
+            (*cluster_radius)[i] = proc_radius.value;
         }
     }
 
-    // // Sorting data array in order of cluster data points
-    // count = 0;
-    // (*cluster_start)[0] = 0;
-    // data_buffer = (double*)malloc(sizeof(double) * ndata * dim);
-    // for (int i = 0; i < kk; i++) {
-    //     for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
-    //         if ((*cluster_assign)[k] == i) {
-    //             for (int ii = j; ii < j + dim; ii++) {
-    //                 data_buffer[count] = (*data)[ii];
-    //                 count++;
-    //             }
-    //             (*cluster_size)[i]++;
-    //         }
-    //     }
-    //     if (i > 0) {
-    //         (*cluster_start)[i] = (*cluster_start)[i - 1] + (*cluster_size)[i - 1] * dim;
-    //     }
-    // }
-    // (*data) = data_buffer;
+    // Sorting data array in order of cluster data points
+    count = 0;
+    (*cluster_start)[0] = 0;
+    data_buffer = (double*)malloc(sizeof(double) * ndata * dim);
+    for (int i = 0; i < kk; i++) {
+        for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
+            if ((*cluster_assign)[k] == i) {
+                for (int ii = j; ii < j + dim; ii++) {
+                    data_buffer[count] = (*data)[ii];
+                    count++;
+                }
+                (*cluster_size)[i]++;
+            }
+        }
+        if (i > 0) {
+            (*cluster_start)[i] = (*cluster_start)[i - 1] + (*cluster_size)[i - 1] * dim;
+        }
+    }
+    (*data) = data_buffer;
 
-    // // Computing the sum of square errors
-    // total_error = 0.0;
-    // for (int i = 0; i < kk; i++) {
-    //     cluster_error = 0.0;
-    //     for (int j = (*cluster_start)[i]; j < (*cluster_start)[i] + (*cluster_size)[i] * dim; j += dim) {
-    //         point_error = 0.0;
-    //         for (int k = j, ii = 0; k < dim; k++, ii++) {
-    //             point_error += fabs((*cluster_centroid)[k][ii]) - fabs((*data)[k]);
-    //         }
-    //         cluster_error += pow(point_error, 2);
-    //     }
-    //     total_error += cluster_error / (*cluster_size)[i];
-    // }
+    // Computing the sum of square errors
+    total_error = 0.0;
+    for (int i = 0; i < kk; i++) {
+        cluster_error = 0.0;
+        for (int j = (*cluster_start)[i]; j < (*cluster_start)[i] + (*cluster_size)[i] * dim; j += dim) {
+            point_error = 0.0;
+            for (int k = j, ii = 0; k < dim; k++, ii++) {
+                point_error += fabs((*cluster_centroid)[i][ii]) - fabs((*data)[k]);
+            }
+            if (point_error > 0) {
+                cluster_error += pow(point_error, 2);
+            }
+        }
+        if (cluster_error > 0) {
+            total_error += cluster_error / (*cluster_size)[i];
+        }
+    }
 
-    // free(centroid_buffer);
+    // Getting all processes total error
+    MPI_Allreduce(&total_error, &all_proc_total_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-    return total_error;
+    free(centroid_buffer);
+    free(all_proc_centroid_buffer);
+
+    return all_proc_total_error;
 }
 
 
@@ -342,7 +376,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &np);
 
-    int checked, ndata = 100, dim = 3, kk = (int)sqrt(ndata);
+    int checked = 0, ndata = 100, dim = 3, kk = (int)sqrt(ndata);
 
     int* cluster_start = (int*)malloc(sizeof(int) * kk);
     int* cluster_size = (int*)malloc(sizeof(int) * kk);
@@ -382,38 +416,45 @@ int main(int argc, char** argv) {
         printf("\nSorting data with k-means...");
     }
     error = kmeans(dim, ndata / np, &data, kk, &cluster_assign, &cluster_start,
-        &cluster_size, &cluster_radius, &cluster_centroid);
+        &cluster_size, &cluster_radius, &cluster_centroid, rank, np);
 
-    // printf("\nSum of square errors: %f", error);
-    // printf("\n\n+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\n");
+    if (rank == 0) {
+        printf("\nSum of square errors: %f", error);
+        printf("\n\n+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+\n");
+        printf("\nGenerating a random query point...");
+        for (int i = 0; i < dim; i++) {
+            query_pt[i] = (double)rand() / RAND_MAX;
+        }
+    }
 
-    // printf("\nGenerating a random query point...");
-    // for (int i = 0; i < dim; i++) {
-    //     query_pt[i] = (double)rand() / RAND_MAX;
-    // }
+    // Broadcasting query point to all processes
+    MPI_Bcast(query_pt, dim, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    // printf("\nSearching for closest data point to query point...");
+    if (rank == 0) {
+        printf("\nSearching for closest data point to query point...");
+    }
     // checked = search_kmeans(dim, ndata, data, kk, cluster_start, cluster_size,
     //     cluster_radius, cluster_centroid, query_pt, &result_pt);
 
-    // printf("\nChecked %d data points for query point.\n", checked);
+    if (rank == 0) {
+        printf("\nChecked %d data points for query point.\n", checked);
+        printf("\nResult point: \n");
+        // for (int i = 0; i < dim; i++) {
+        //     printf("Coordinate %d\t --> %f\n", i, result_pt[i]);
+        // }
+    }
 
-    // printf("\nResult point: \n");
-    // for (int i = 0; i < dim; i++) {
-    //     printf("Coordinate %d\t --> %f\n", i, result_pt[i]);
-    // }
-
-    // // Clean up
-    // for (int i = 0; i < kk; i++) {
-    //     free(cluster_centroid[i]);
-    // }
-    // free(data);
-    // free(query_pt);
-    // free(result_pt);
-    // free(cluster_size);
-    // free(cluster_start);
-    // free(cluster_assign);
-    // free(cluster_radius);
+    // Clean up
+    for (int i = 0; i < kk; i++) {
+        free(cluster_centroid[i]);
+    }
+    free(data);
+    free(query_pt);
+    free(result_pt);
+    free(cluster_size);
+    free(cluster_start);
+    free(cluster_assign);
+    free(cluster_radius);
 
     MPI_Finalize();
 
