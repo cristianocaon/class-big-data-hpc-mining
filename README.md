@@ -7,3 +7,4 @@ Algorithms studied and implemented throughout the course:
 1. K-Dimensional Tree (K-d Tree) sorting & searching
 2. Locality-Sensitive Hashing (LSH) sorting & searching
 3. K-Means sorting & searching
+4. Parallelized K-Means sorting & searching
