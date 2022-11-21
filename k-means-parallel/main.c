@@ -26,26 +26,27 @@ int initial_centers(int dim, int ndata, double* data, int kk,
    * Returns the initial centers for the 'kk' clusters.
   ******************************************************/
 
-  int chosen_rank, largest_idx = 0, clusters = 2;
+  int root = 0, largest_idx = 0, clusters = 2;
 
-  double temp_dist, largest;
+  double temp_dist;
   double* d_min = (double*)malloc(sizeof(double) * ndata);
 
-  struct double_rank dist;
-  struct double_rank global_result;
+  struct double_rank local_dist;
+  struct double_rank global_dist;
 
   // Generating first cluster centroid
   (*cluster_centroid)[0] = (double*)malloc(sizeof(double) * dim);
-  if (rank == 0) {
+  if (rank == root) {
     for (int i = 0; i < dim; i++) {
       (*cluster_centroid)[0][i] = data[i];
     }
   }
 
   // Broadcasting first cluster center
-  MPI_Bcast((*cluster_centroid)[0], dim, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Bcast((*cluster_centroid)[0], dim, MPI_DOUBLE, root, MPI_COMM_WORLD);
 
-  dist.value = __DBL_MIN__;
+  local_dist.value = __DBL_MIN__;
+  local_dist.rank = rank;
   // Finding second furthest away centroid
   (*cluster_centroid)[1] = (double*)malloc(sizeof(double) * dim);
   for (int i = 0; i < ndata * dim; i += dim) {
@@ -54,21 +55,19 @@ int initial_centers(int dim, int ndata, double* data, int kk,
       temp_dist += pow(fabs((*cluster_centroid)[0][k]) - fabs(data[j]), 2);
     }
     temp_dist = sqrt(temp_dist);
-    if (temp_dist > dist.value) {
+    if (temp_dist > local_dist.value) {
       for (int j = i, k = 0; j < i + dim; j++, k++) {
         (*cluster_centroid)[1][k] = data[j];
       }
-      dist.value = temp_dist;
+      local_dist.value = temp_dist;
     }
   }
 
-  dist.rank = rank;
-
   // Obtaining global MAX distance
-  MPI_Allreduce(&dist, &global_result, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+  MPI_Allreduce(&local_dist, &global_dist, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
 
   // Broadcasting second furthest away centroid
-  MPI_Bcast((*cluster_centroid)[1], dim, MPI_DOUBLE, global_result.rank, MPI_COMM_WORLD);
+  MPI_Bcast((*cluster_centroid)[1], dim, MPI_DOUBLE, global_dist.rank, MPI_COMM_WORLD);
 
   // Creating new cluster centers
   while (clusters < kk) {
@@ -86,32 +85,29 @@ int initial_centers(int dim, int ndata, double* data, int kk,
         }
       }
     }
-    // Getting largest data point to a center distance
-    largest = d_min[0];
+    // Getting furthest data point to a center distance
     largest_idx = 0;
-    global_result.value = d_min[0];
-    global_result.rank = rank;
+    local_dist.value = d_min[0];
     for (int i = 1; i < ndata; i++) {
-      if (d_min[i] > largest) {
-        largest = d_min[i];
+      if (d_min[i] > local_dist.value) {
+        local_dist.value = d_min[i];
         largest_idx = i;
-        global_result.value = d_min[i];
       }
     }
 
     // Obtaining nth global MAX distance
-    MPI_Allreduce(&dist, &global_result, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_dist, &global_dist, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
 
     // Saving data point as a new cluster center
     (*cluster_centroid)[clusters] = (double*)malloc(sizeof(double) * dim);
-    if (rank == global_result.rank) {
+    if (rank == global_dist.rank) {
       for (int i = largest_idx * dim, j = 0; i < largest_idx * dim + dim; i++, j++) {
         (*cluster_centroid)[clusters][j] = data[i];
       }
     }
 
     // Broadcasting nth furthest away centroid
-    MPI_Bcast((*cluster_centroid)[clusters], dim, MPI_DOUBLE, global_result.rank, MPI_COMM_WORLD);
+    MPI_Bcast((*cluster_centroid)[clusters], dim, MPI_DOUBLE, global_dist.rank, MPI_COMM_WORLD);
 
     clusters++;
   }
@@ -144,7 +140,7 @@ double kmeans(int dim, int ndata, double** data, int kk, // input
   double* centroid_buffer;
   double* all_proc_centroid_buffer;
 
-  struct double_rank proc_radius;
+  struct double_rank local_radius;
   struct double_rank global_radius;
 
   while (stop_iteration == 0) {
@@ -210,8 +206,8 @@ double kmeans(int dim, int ndata, double** data, int kk, // input
 
     // Re-calculating cluster radius
     for (int i = 0; i < kk; i++) {
-      proc_radius.value = __DBL_MIN__;
-      proc_radius.rank = rank;
+      local_radius.value = __DBL_MIN__;
+      local_radius.rank = rank;
       for (int j = 0, k = 0; j < ndata * dim; j += dim, k++) {
         if ((*cluster_assign)[k] == i) {
           temp_dist = 0.0;
@@ -219,14 +215,14 @@ double kmeans(int dim, int ndata, double** data, int kk, // input
             temp_dist += pow(fabs((*cluster_centroid)[i][ii]) - fabs((*data)[j + ii]), 2);
           }
           temp_dist = sqrt(temp_dist);
-          proc_radius.value = (temp_dist > proc_radius.value) ? temp_dist : proc_radius.value;
+          local_radius.value = (temp_dist > local_radius.value) ? temp_dist : local_radius.value;
         }
       }
       // Getting largest radius from processes
-      MPI_Allreduce(&proc_radius, &global_radius, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+      MPI_Allreduce(&local_radius, &global_radius, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
       // Broadcasting largest radius to all processes
-      MPI_Bcast(&proc_radius.value, 1, MPI_DOUBLE, proc_radius.rank, MPI_COMM_WORLD);
-      (*cluster_radius)[i] = proc_radius.value;
+      MPI_Bcast(&local_radius.value, 1, MPI_DOUBLE, local_radius.rank, MPI_COMM_WORLD);
+      (*cluster_radius)[i] = local_radius.value;
     }
   }
 
@@ -292,7 +288,7 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
 
   int global_checked = 0, local_checked = 0, cluster = -1;
 
-  double radius, dist, min_dist = __DBL_MAX__;
+  double radius, temp_dist;
 
   struct double_rank local_dist;
   struct double_rank global_dist;
@@ -302,29 +298,27 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
 
   // Finding closest cluster center
   for (int i = 0; i < kk; i++) {
-    dist = 0.0;
+    temp_dist = 0.0;
     for (int j = 0; j < dim; j++) {
-      dist += pow(fabs(query_pt[j]) - fabs(cluster_centroid[i][j]), 2);
+      temp_dist += pow(fabs(query_pt[j]) - fabs(cluster_centroid[i][j]), 2);
     }
-    dist = sqrt(dist);
-    if (dist < min_dist) {
-      min_dist = dist;
-      local_dist.value = min_dist;
+    temp_dist = sqrt(temp_dist);
+    if (temp_dist < local_dist.value) {
+      local_dist.value = temp_dist;
       cluster = i;
     }
   }
 
   // Finding closest data point inside cluster
-  min_dist = __DBL_MAX__;
+  local_dist.value = __DBL_MAX__;
   for (int i = cluster_start[cluster]; i < cluster_start[cluster] + cluster_size[cluster] * dim; i += dim) {
-    dist = 0.0;
+    temp_dist = 0.0;
     for (int j = i, k = 0; j < i + dim; j++, k++) {
-      dist += pow(fabs(query_pt[k]) - fabs(data[j]), 2);
+      temp_dist += pow(fabs(query_pt[k]) - fabs(data[j]), 2);
     }
-    dist = sqrt(dist);
-    if (dist < min_dist) {
-      min_dist = dist;
-      local_dist.value = min_dist;
+    temp_dist = sqrt(temp_dist);
+    if (temp_dist < local_dist.value) {
+      local_dist.value = temp_dist;
       for (int j = i, k = 0; j < i + dim; j++, k++) {
         (*result_pt)[k] = data[j];
       }
@@ -332,28 +326,26 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
     local_checked++;
   }
 
-  radius = min_dist;
   radius = local_dist.value;
 
   // Looking for even closer data point within query point cluster
   for (int i = 0; i < kk; i++) {
-    dist = 0.0;
+    temp_dist = 0.0;
     for (int j = 0; j < dim; j++) {
-      dist += pow(fabs(query_pt[j]) - fabs(cluster_centroid[i][j]), 2);
+      temp_dist += pow(fabs(query_pt[j]) - fabs(cluster_centroid[i][j]), 2);
     }
-    dist = sqrt(dist);
+    temp_dist = sqrt(temp_dist);
     // Check if query point cluster intersects with other clusters
-    if (dist < radius + cluster_radius[i]) {
+    if (temp_dist < radius + cluster_radius[i]) {
       for (int j = cluster_start[i]; j < cluster_start[i] + cluster_size[i] * dim; j += dim) {
-        dist = 0.0;
+        temp_dist = 0.0;
         for (int k = j, ii = 0; k < j + dim; k++, ii++) {
-          dist += pow(fabs(query_pt[ii]) - fabs(data[k]), 2);
+          temp_dist += pow(fabs(query_pt[ii]) - fabs(data[k]), 2);
         }
-        dist = sqrt(dist);
+        temp_dist = sqrt(temp_dist);
         // Checking if there is a closer data point
-        if (dist < min_dist) {
-          min_dist = dist;
-          local_dist.value = min_dist;
+        if (temp_dist < local_dist.value) {
+          local_dist.value = temp_dist;
           for (int k = j, ii = 0; k < j + dim; k++, ii++) {
             (*result_pt)[ii] = data[k];
           }
@@ -366,7 +358,7 @@ int search_kmeans(int dim, int ndata, double* data, int kk,
   // Getting global closest distance
   MPI_Allreduce(&local_dist, &global_dist, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
 
-  // Broadcasting result point for closest distance
+  // Broadcasting result point of closest distance
   if (rank == global_dist.rank) {
     for (int i = 0; i < np; i++) {
       if (i != global_dist.rank) {
@@ -396,17 +388,26 @@ int main(int argc, char** argv) {
    *  4- Search closest distance to query points
   ***********************************************/
 
-  // MPI Parameters
   int np, rank;
   MPI_Status status;
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &np);
 
-  int seed = 0, checked = 0, ndata = 10000, dim = 4, kk = 10;
+  int seed = 0, checked = 0, ndata = 100000, dim = 4, kk = 10;
+
+  int* cluster_size = (int*)malloc(sizeof(int) * kk);
+  int* cluster_start = (int*)malloc(sizeof(int) * kk);
+
+  double error;
 
   double* data = (double*)malloc(sizeof(double) * (ndata / np) * dim);
+  double* query_pt = (double*)malloc(sizeof(double) * dim);
+  double* result_pt = (double*)malloc(sizeof(double) * dim);
+  double* cluster_radius = (double*)malloc(sizeof(double) * kk);
   double** cluster_centroid = (double**)malloc(sizeof(double*) * kk);
+
+  short* cluster_assign = (short*)malloc(sizeof(short) * ndata / np);
 
   if (rank == 0) {
     printf("\nParameters:\n+----------------------+");
@@ -425,14 +426,6 @@ int main(int argc, char** argv) {
     printf("\nCreating initial cluster centers...");
   }
   initial_centers(dim, ndata / np, data, kk, &cluster_centroid, rank, np);
-
-  int* cluster_start = (int*)malloc(sizeof(int) * kk);
-  int* cluster_size = (int*)malloc(sizeof(int) * kk);
-
-  short* cluster_assign = (short*)malloc(sizeof(short) * ndata / np);
-
-  double error;
-  double* cluster_radius = (double*)malloc(sizeof(double) * kk);
 
   for (int i = 0; i < ndata / np; i++) {
     cluster_assign[i] = -1;
@@ -459,9 +452,6 @@ int main(int argc, char** argv) {
     // Receiving seed from root process for query point
     MPI_Recv(&seed, 1, MPI_INT, 0, 999, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   }
-
-  double* query_pt = (double*)malloc(sizeof(double) * dim);
-  double* result_pt = (double*)malloc(sizeof(double) * dim);
 
   srand(seed);
   for (int i = 0; i < dim; i++) {
